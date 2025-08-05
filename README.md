@@ -68,6 +68,7 @@ For experimental datasets, the gene expression file may either be:
 - a `.csv` file with the same format as the simulated datasets, or
 - a pickle file containing a list of list of np.ndarrays, where each ndarray is a gene expression matrix (cell x gene) for a time snapshot for each branch.
   
+
 Example file `gene_expression_list.pkl` is provided in the `sample_inputs/` folder, generated from the mHSC-L dataset with "TFs + 500 genes".
 It has the following structure:
 ```python
@@ -167,18 +168,50 @@ We use AUPRC and EPR to evaluate the inferred networks, and their definitions ca
 
 AUPRC is calculated by the function `sklearn.metrics.average_precision_score`.
 
-EPR is calculated by the function:
+EPR is calculated by the function `cal_epr` in `utils.py`.
+
+# Visualization
+We have wrapped the visualization of gene expression, reconstructed trajectories, trained CFM $v(\theta)$ and score matching $s(\theta)$ models into a single function `plot_model` in `utils.py`.
+
+An example usage is as follows:
 ```python
-def cal_epr(ref_net, preds):
-    """
-    Calculate the Edge Precision Rate (EPR) for the inferred network.
-    Args:
-        ref_net (np.ndarray): The reference network, a binary matrix of shape (n_genes, n_genes).
-        preds (np.ndarray): The predicted network, a confidence matrix of shape (n_genes, n_genes).
-    Returns:
-        float: The Early Precision Rate (EPR) value.
-    """
-    return len(set(np.argpartition(preds.reshape(-1), -ref_net.sum())[-ref_net.sum():]).intersection(set(np.where(ref_net.reshape(-1))[0]))) / ref_net.mean() / ref_net.sum()
+from utils import plot_model
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+
+branch_id = 0
+data = np.load("gene_expression_list.pkl", allow_pickle=True)[branch_id]
+traj = np.load("traj.npy", allow_pickle=True)
+n_gene = data[0].shape[1]
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+sf2m_model = MLP([n_gene, 128, 128, 128, 128, 128, n_gene], time_varying=True).to(device)
+sf2m_score_model = MLP([n_gene, 128, 128, 128, 128, 128, n_gene], time_varying=True).to(device)
+sf2m_model.load_state_dict(torch.load(f"sf2m_model.pt", map_location=device))
+sf2m_score_model.load_state_dict(torch.load(f"sf2m_score_model.pt", map_location=device))
+sf2m_model.eval()
+sf2m_score_model.eval()
+
+fig, ax = plt.subplots(figsize=(6, 6))
+plot_model(
+    ax=ax,
+    data=data,
+    traj=traj,
+    sf2m_model=sf2m_model,
+    sf2m_score_model=sf2m_score_model,
+    plot_traj=True,
+    plot_sf2m_model=True,
+    plot_sf2m_score_model=True,
+    title=f"Model Visualization",
+)
+plt.show()
 ```
+
+Visualization of the model on all experimental datasets is provided in the `traj_qc.png` file.
+
+![model_viz](traj_qc.png)
+
 <!-- # Citation
 If you use this code in your research, please cite our paper: -->
+
